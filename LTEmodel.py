@@ -2,101 +2,96 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 
-"""_summary_
-LTE (Long-Term Evolution) is a standard for wireless broadband communication. The LTEmodel class is designed to simulate and 
-analyze the performance of LTE networks by calculating the Block Error Rate (BLER) based on the Signal-to-Interference-plus-Noise Ratio (SINR) 
-and Modulation and Coding Scheme (MCS) index. The class also includes a method to plot a waterfall diagram, which visually represents the BLER as a function of SINR and MCS index.
-The calculateBler method uses a sigmoid function to model the relationship between SINR, MCS index, and BLER. Higher SINR values typically result in lower BLER values, while higher MCS indices indicate more data being loaded on each wave, which can increase the BLER.
-    
 """
+LTE (Long-Term Evolution) Link Adaptation Simulator - Day 1
+A visual analysis of the relationship between SINR, BLER, and Throughput.
+Comments are in English for professional Git documentation.
+"""
+
 class LTEmodel:
     def __init__(self, model_name):
         self.model_name = model_name
-        self.MSC_Threshold = { }
-    def calculateBler(self, sinr_db, mcs_index, steepness = 0.75): 
-        """_summary_
-        Args:
-            sinr_db (_type_): _description_
-            mcs_index (_type_): _description_
+        
+    def calculateBler(self, sinr_db, mcs_index, steepness=0.75): 
+        # Calculate BLER using a sigmoid function shifted by MCS index
+        exponent = steepness * (sinr_db - mcs_index)
+        exponent = np.clip(exponent, -50, 50)
+        bler = 1 / (1 + np.exp(exponent))
+        return bler
 
-        Returns:
-            _type_: _description_
-        """
-        # Implement the logic to calculate BLER (Block Error Rate)
-        # based on the SINR (Signal-to-Interference-plus-Noise Ratio) in dB and MCS (Modulation and Coding Scheme) index
-                                
-        # The BLER is calculated using a sigmoid function, where higher SINR values result in lower BLER values
-        
-        # the value of SINR in dB ranges from -10 dB to 30 dB, and the MCS index ranges from 0 to 28
-        # when the MCS is higher, that means we are loading more data on each wave
-        # so it will be harder to decode the data, which will increase the BLER 
-        
-        #moving the threshold to the right as the MCS index increases, which means that higher MCS indices require higher SINR values to achieve the same BLER
-        #with higher SINR values the bler will be lower, and with higher mcs index the bler will be higher, so we can use a sigmoid function to model this relationship
-        sigmoid = 1 / (1 +  math.e ** (steepness*(sinr_db-mcs_index)))
-        return sigmoid
+    def max_rate(self, mcs_index, amplification_factor=2.5):
+        # Peak rate in Mbps for a given MCS
+        return mcs_index * amplification_factor
+
+    def calc_throughput(self, mcs_index, sinr_db):
+        # Net Throughput = Max Rate * Success Probability (1 - BLER)
+        bler = self.calculateBler(sinr_db, mcs_index)
+        return self.max_rate(mcs_index) * (1 - bler)
     
-    def plot_waterfall(self, data):
-        # Implement the logic to plot a waterfall diagram based on the provided data
-        # The waterfall diagram is a visual representation of the BLER (Block Error Rate) as a function of SINR (Signal-to-Interference-plus-Noise Ratio) and MCS (Modulation and Coding Scheme) index
-        # The x-axis represents the SINR in dB, the y-axis represents the MCS index, and the color intensity represents the BLER
+    def plot_full_analysis(self, bler_data, sinr_range, mcs_indices):
+        plt.style.use('seaborn-v0_8-muted')
+        fig, axs = plt.subplots(2, 2, figsize=(15, 11))
+        
+        # 1. Waterfall Diagram (Heatmap)
+        im = axs[0, 0].imshow(bler_data, aspect='auto', cmap='viridis', 
+                             origin='lower', extent=[sinr_range[0], sinr_range[-1], mcs_indices[0], mcs_indices[-1]])
+        fig.colorbar(im, ax=axs[0, 0], label='BLER (Error Rate)')
+        axs[0, 0].set_title('1. Waterfall Diagram (BLER Heatmap)', fontweight='bold')
+        axs[0, 0].set_xlabel('SINR (dB)')
+        axs[0, 0].set_ylabel('MCS Index')
 
-        plt.figure(figsize=(9, 7))
+        # 2. BLER vs SINR
+        sample_mcs = [2, 10, 18, 26]
+        for mcs in sample_mcs:
+            bler_values = [self.calculateBler(s, mcs) for s in sinr_range]
+            axs[0, 1].plot(sinr_range, bler_values, label=f'MCS {mcs}', linewidth=2)
+        
+        axs[0, 1].axhline(y=0.1, color='red', linestyle='--', alpha=0.6, label='10% Target')
+        axs[0, 1].set_title('2. BLER Waterfall Curves', fontweight='bold')
+        axs[0, 1].set_xlabel('SINR (dB)')
+        axs[0, 1].set_ylabel('BLER')
+        axs[0, 1].legend(fontsize=8)
+        axs[0, 1].grid(True, alpha=0.3)
 
-        # Waterfall diagram
-        plt.subplot(2, 2, 1)
-        plt.imshow(data, aspect='auto', cmap='viridis', origin='lower')
-        plt.colorbar(label='BLER')
-        plt.xlabel('SINR (dB)')
-        plt.ylabel('MCS Index')
-        plt.title('Waterfall Diagram')
+        # 3. BLER vs MCS
+        sample_sinrs = [-2, 5, 15, 25]
+        for s in sample_sinrs:
+            bler_v_mcs = [self.calculateBler(s, m) for m in mcs_indices]
+            axs[1, 0].plot(mcs_indices, bler_v_mcs, label=f'SINR {s} dB', marker='o', markersize=3)
+        
+        axs[1, 0].set_title('3. BLER vs MCS (Fixed Signal Quality)', fontweight='bold')
+        axs[1, 0].set_xlabel('MCS Index')
+        axs[1, 0].set_ylabel('BLER')
+        axs[1, 0].legend(fontsize=8)
+        axs[1, 0].grid(True, alpha=0.3)
+        
+        # 4. THROUGHPUT vs SINR (The "Money" Graph)
+        for mcs in sample_mcs:
+            tp_values = [self.calc_throughput(mcs, s) for s in sinr_range]
+            axs[1, 1].plot(sinr_range, tp_values, label=f'MCS {mcs}', linewidth=2)
+        
+        # Using Axis Coordinates (0 to 1) for text to ensure it stays inside the plot   
 
-        # BLER vs SINR
-        plt.subplot(2, 2, 2)
-        sample_mcs_indices = [0,1, 2, 5, 10, 15, 20,25, 28]  # Sample MCS indices to plot
-        for mcs_index in sample_mcs_indices:
-            plt.plot(np.linspace(-10, 30, data.shape[1]), data[mcs_index], label=f'MCS {mcs_index}')
-        plt.xlabel('SINR (dB)')
-        plt.ylabel('BLER')
-        plt.title('BLER vs SINR for Different MCS Indices')
-        plt.legend(fontsize=8, loc= 'lower right')
-        plt.grid()
-
-        # BLER vs MCS
-        plt.subplot(2, 2, 3)
-        mcs_indices = np.arange(0, 29)
-        for sinr_db in np.linspace(-10, 30, 5):
-            bler_values = [self.calculateBler(sinr_db, mcs_index) for mcs_index in mcs_indices]
-            plt.plot(mcs_indices, bler_values, label=f'SINR {sinr_db:.1f} dB')
-        plt.xlabel('MCS Index')
-        plt.ylabel('BLER')
-        plt.title('BLER vs MCS Index for Different SINR Values')
-        plt.legend()
-        plt.grid()
-
-        plt.tight_layout()
+        axs[1, 1].set_title('4. Actual Throughput (Mbps) vs SINR', fontweight='bold')
+        axs[1, 1].set_xlabel('SINR (dB)')
+        axs[1, 1].set_ylabel('Throughput (Mbps)')
+        axs[1, 1].legend(fontsize=8, loc='upper left')
+        axs[1, 1].grid(True, alpha=0.3)
+        
+        # Tight layout with extra padding to prevent clipping
+        plt.tight_layout(pad=3.0)
         plt.show()
 
-
 def main():
-    model = LTEmodel("ExampleModel")
+    model = LTEmodel("LTE_PHY_Sim_Day1")
+    sinr_range = np.linspace(-10, 35, 200) # Extended range for better visualization
+    mcs_indices = np.arange(0, 30)
     
-    # Example data for SINR and MCS index
-    sinr_db_values = np.linspace(-10, 30, 100)  # SINR values from -10 dB to 30 dB
-    mcs_indices = np.arange(0, 29)  # MCS index from 0 to 28
-    
-    # Create a 2D array to store BLER values for each combination of SINR and MCS index
-    bler_data = np.zeros((len(mcs_indices), len(sinr_db_values)))
-    
-    print ("Calculating BLER data for each combination of SINR and MCS index...")
-    for i, mcs_index in enumerate(mcs_indices):
-        for j, sinr_db in enumerate(sinr_db_values):
-            bler_data[i, j] = model.calculateBler(sinr_db, mcs_index)
-    print(bler_data)
+    # Calculate heatmap data
+    bler_data = np.array([[model.calculateBler(s, m) for s in sinr_range] for m in mcs_indices])
 
-    # Plot the waterfall diagram
-    model.plot_waterfall(bler_data)
-    
-    print("BLER data calculated and waterfall diagram plotted successfully.")
+    print("Day 1 Simulation Complete. Opening Dashboard...")
+    model.plot_full_analysis(bler_data, sinr_range, mcs_indices)
+
 if __name__ == "__main__":
     main()
