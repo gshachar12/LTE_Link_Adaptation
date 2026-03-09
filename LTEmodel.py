@@ -28,6 +28,16 @@ class LTEmodel:
         bler = self.calculateBler(sinr_db, mcs_index)
         return self.max_rate(mcs_index) * (1 - bler)
     
+    def get_optimal_mcs(self, sinr_db):
+        max_throughput = 0 
+        for mcs_index in range(29):
+            throughput = self.calc_throughput( mcs_index, sinr_db)
+            if throughput > max_throughput:
+                max_throughput = throughput
+                optimal_mcs = mcs_index
+        return optimal_mcs
+    
+    
     def plot_full_analysis(self, bler_data, sinr_range, mcs_indices):
         plt.style.use('seaborn-v0_8-muted')
         fig, axs = plt.subplots(2, 2, figsize=(15, 11))
